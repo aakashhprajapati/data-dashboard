@@ -1,114 +1,83 @@
-// ============================================
-// BACKEND SERVER.JS - MONGODB ATLAS VERSION
-// ============================================
-
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const helmet = require('helmet');
 require('dotenv').config();
 
-// Import routes
 const insightRoutes = require('./routes/insights');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ============================================
-// CORS CONFIGURATION - FIXED FOR ALL ORIGINS
-// ============================================
-app.use(cors({
-    origin: '*',  // Allow ALL origins
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
-}));
-
+// Middleware
+app.use(cors({ origin: '*' }));
 app.use(express.json());
-app.use(helmet());
 
-// ============================================
-// MONGODB ATLAS CONNECTION - YOUR CREDENTIALS
-// ============================================
+// MongoDB Atlas Connection - YOUR CONNECTION STRING
 const MONGODB_URI = 'mongodb+srv://aka:aka@cluster0.c6dcp21.mongodb.net/database?appName=Cluster0';
 
-console.log('🔗 Connecting to YOUR MongoDB Atlas...');
+mongoose.connect(MONGODB_URI)
+    .then(async () => {
+        console.log('✅ Connected to MongoDB Atlas');
+        
+        // Check if data exists, if not create sample
+        const Insight = require('./models/Insight');
+        const count = await Insight.countDocuments();
+        
+        if (count === 0) {
+            console.log('📝 Creating sample data...');
+            
+            const sampleData = [
+                { intensity: 85, sector: 'Technology', country: 'India', region: 'Asia', topic: 'AI', likelihood: 75, relevance: 90 },
+                { intensity: 70, sector: 'Healthcare', country: 'USA', region: 'North America', topic: 'Vaccine', likelihood: 80, relevance: 85 },
+                { intensity: 65, sector: 'Finance', country: 'UK', region: 'Europe', topic: 'Blockchain', likelihood: 60, relevance: 75 },
+                { intensity: 80, sector: 'Energy', country: 'China', region: 'Asia', topic: 'Solar', likelihood: 85, relevance: 88 },
+                { intensity: 60, sector: 'Education', country: 'Multiple', region: 'Global', topic: 'EdTech', likelihood: 70, relevance: 82 }
+            ];
+            
+            await Insight.insertMany(sampleData);
+            console.log(`✅ Created ${sampleData.length} sample records`);
+        } else {
+            console.log(`📊 Database has ${count} existing records`);
+        }
+    })
+    .catch(err => console.error('❌ MongoDB connection error:', err));
 
-mongoose.connect(MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 45000,
-})
-.then(async () => {
-    console.log('✅ Connected to YOUR MongoDB Atlas successfully!');
-    
-    // Check YOUR data
-    const Insight = require('./models/Insight');
-    const count = await Insight.countDocuments();
-    console.log(`📊 YOUR database has ${count} documents`);
-    
-    if (count === 0) {
-        console.log('⚠️ WARNING: Your database is EMPTY!');
-        console.log('Please import your jsondata.json file using:');
-        console.log('1. MongoDB Compass');
-        console.log('2. Or run the import script');
-    } else {
-        // Show YOUR data preview
-        const sample = await Insight.findOne();
-        console.log('✅ YOUR data sample:', {
-            sector: sample.sector,
-            country: sample.country,
-            intensity: sample.intensity,
-            topic: sample.topic
-        });
-    }
-})
-.catch((err) => {
-    console.error('❌ MongoDB connection error:', err.message);
-});
-
-// ============================================
-// ROUTES
-// ============================================
+// Routes
 app.use('/api/insights', insightRoutes);
 
-// ============================================
-// HEALTH CHECK ENDPOINT
-// ============================================
-app.get('/health', (req, res) => {
+// Root endpoint
+app.get('/', (req, res) => {
     res.json({ 
-        status: 'OK',
-        database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
-        timestamp: new Date().toISOString()
+        message: 'Dashboard API', 
+        status: 'running',
+        endpoints: ['/api/insights', '/api/insights/filters', '/api/insights/stats', '/api/insights/aggregated']
     });
 });
 
-// ============================================
-// TEST ENDPOINT - SHOWS YOUR ACTUAL DATA
-// ============================================
+// Health check
+app.get('/health', (req, res) => {
+    res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// Test data endpoint
 app.get('/api/test-data', async (req, res) => {
     try {
         const Insight = require('./models/Insight');
         const count = await Insight.countDocuments();
-        const sample = await Insight.findOne().select('sector country intensity likelihood relevance');
+        const sample = await Insight.findOne();
         
         res.json({
-            message: 'Using YOUR MongoDB Atlas data',
+            connected: true,
             totalRecords: count,
             sampleRecord: sample,
-            databaseStatus: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
+            database: 'MongoDB Atlas'
         });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.json({ connected: false, error: error.message });
     }
 });
 
-// ============================================
-// START SERVER
-// ============================================
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`🌐 Health check: http://localhost:${PORT}/health`);
-    console.log(`📊 YOUR data: http://localhost:${PORT}/api/test-data`);
+    console.log(`📊 Test: http://localhost:${PORT}/api/test-data`);
 });
